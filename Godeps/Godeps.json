@@ -1,0 +1,5 @@
+{
+	"ImportPath": "github.com/dockpit/binocular",
+	"GoVersion": "go1.3.3",
+	"Deps": []
+}
