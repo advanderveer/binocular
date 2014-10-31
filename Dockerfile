@@ -9,5 +9,5 @@ ADD . /gopath/src/github.com/dockpit/binocular
 RUN godep go build -o /gopath/bin/binocular
 
 CMD []
-EXPOSE 8000
+EXPOSE 3839
 ENTRYPOINT ["/gopath/bin/binocular"]
