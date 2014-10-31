@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fsouza/go-dockerclient"
 )
@@ -101,29 +102,94 @@ func main() {
 	//inject monitoring into each container
 	for _, c := range cs {
 
-		//setup
+		//skip binocular containers
+		if strings.HasPrefix(c.Image, "binocular") {
+			log.Printf("[%s] Skipping binocular container", c.ID)
+			continue
+		}
+
+		//create
 		copts := docker.CreateExecOptions{
-			Container: c.ID,
-			Cmd:       []string{"touch", "/tmp/x"},
+			Container:    c.ID,
+			AttachStdin:  false,
+			AttachStdout: true,
+			AttachStderr: true,
+			Cmd:          []string{"apt-get", "update"},
 		}
 
-		execObj, err := dock.client.CreateExec(copts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//start
 		sopts := docker.StartExecOptions{
-			Detach: true,
+			Detach:       true,
+			OutputStream: os.Stdout,
+			ErrorStream:  os.Stderr,
 		}
 
-		err = dock.client.StartExec(execObj.Id, sopts)
+		exec, err := dock.client.CreateExec(copts)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		//progress?
-		fmt.Println(c.ID, execObj.Id)
+		//update package control
+		log.Printf("[%s] (%s), Updating...", c.ID, copts.Cmd)
+		err = dock.client.StartExec(exec.Id, sopts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		//install prerequiseted
+		copts.Cmd = []string{"apt-get", "install", "-y", "wget", "httpry"}
+		exec, err = dock.client.CreateExec(copts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("[%s] (%s), Installing...", c.ID, copts.Cmd)
+		err = dock.client.StartExec(exec.Id, sopts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		//download the script
+		copts.Cmd = []string{"wget", "-O", "/tmp/binocular.sh", "https://gist.githubusercontent.com/advanderveer/1b0a563091af2b0b9b0e/raw/f406fc67741e320960ce00a940606744605284ff/binocular.sh"}
+		exec, err = dock.client.CreateExec(copts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("[%s] (%s), Downloading binocular...", c.ID, copts.Cmd)
+		err = dock.client.StartExec(exec.Id, sopts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		//make the downloaded script executable
+		copts.Cmd = []string{"chmod", "+x", "/tmp/binocular.sh"}
+		exec, err = dock.client.CreateExec(copts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("[%s] (%s), Make executable...", c.ID, copts.Cmd)
+		err = dock.client.StartExec(exec.Id, sopts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		//finally execute the script
+		copts.AttachStdout = false
+		copts.AttachStderr = false
+
+		copts.Cmd = []string{"sh", "/tmp/binocular.sh"}
+		exec, err = dock.client.CreateExec(copts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("[%s] (%s), Executing...", c.ID, copts.Cmd)
+		err = dock.client.StartExec(exec.Id, sopts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 	}
 
 	//start a web server that logs incoming requests to a file

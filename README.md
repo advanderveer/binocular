@@ -11,7 +11,6 @@ Run docker container
 docker run -it --privileged ubuntu:bi
 ```
 
-
 fire http request in the background
 ```
 while true; do echo "requesting..."; wget http://www.google.com; echo "done"; sleep 1; done &> /dev/null &
