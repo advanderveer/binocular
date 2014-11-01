@@ -1,85 +1,139 @@
-<!DOCTYPE html>
-<meta charset="utf-8">
-<style>
+<html>
+  <head>
+    <style>
 
 .node {
-  stroke: #fff;
-  stroke-width: 1.5px;
+  opacity: 0.5;
+}
+
+.node:hover {
+  opacity: 1;
 }
 
 .link {
   stroke: #999;
-  stroke-opacity: .6;
+  stroke-opacity: 0.3;
 }
 
-</style>
-<body>
-<script src="http://d3js.org/d3.v3.min.js"></script>
-<script>
+    </style>
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+  </head>
+  <body>
+    <div id="viz"></div>
+    <script>
+
+function name(d) { return d.name; }
+function group(d) { return d.group; }
+
+var color = d3.scale.category10();
+function colorByGroup(d) { return color(group(d)); }
 
 var width = 960,
     height = 500;
 
-var color = d3.scale.category20();
+var svg = d3.select('#viz')
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+var node, link;
+
+var voronoi = d3.geom.voronoi()
+    .x(function(d) { return d.x; })
+    .y(function(d) { return d.y; })
+    .clipExtent([[-10, -10], [width+10, height+10]]);
+
+function recenterVoronoi(nodes) {
+    var shapes = [];
+    voronoi(nodes).forEach(function(d) {
+        if ( !d.length ) return;
+        var n = [];
+        d.forEach(function(c){
+            n.push([ c[0] - d.point.x, c[1] - d.point.y ]);
+        });
+        n.point = d.point;
+        shapes.push(n);
+    });
+    return shapes;
+}
 
 var force = d3.layout.force()
-    .charge(-120)
-    .linkDistance(30)
+    .charge(-2000)
+    .friction(0.3)
+    .linkDistance(50)
     .size([width, height]);
 
-var svg = d3.select("body").append("svg")
-    .attr("width", width)
-    .attr("height", height);
+force.on('tick', function() {
+    node.attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; })
+        .attr('clip-path', function(d) { return 'url(#clip-'+d.index+')'; });
 
-d3.json("/logs", function(error, data) {
+    link.attr('x1', function(d) { return d.source.x; })
+        .attr('y1', function(d) { return d.source.y; })
+        .attr('x2', function(d) { return d.target.x; })
+        .attr('y2', function(d) { return d.target.y; });
 
-	//prepare final data container
-	var nodes = []
-	var links = []
-	var graph = {nodes: nodes, links: links}
+    var clip = svg.selectAll('.clip')
+        .data( recenterVoronoi(node.data()), function(d) { return d.point.index; } );
 
-	//add container name to nodes if not yet exists
-	var upsertNode = function(name){
-		var n = nodes.filter(function(n){
-			return n.name === name
-		})
+    clip.enter().append('clipPath')
+        .attr('id', function(d) { return 'clip-'+d.point.index; })
+        .attr('class', 'clip');
+    clip.exit().remove()
 
-		if(n.length === 0) {
-			nodes.push({name: name, group: nodes.length})
-		}
-	}
+    clip.selectAll('path').remove();
+    clip.append('path')
+        .attr('d', function(d) { return 'M'+d.join(',')+'Z'; });
+});
 
-	//get an index of a node by name
-	var indexOfNode = function(name) {
-		var idx = 0
-		nodes.forEach(function(n){
-			if(n.name === name) {
-				idx = nodes.indexOf(n)
-				return
-			}
-		})
+d3.json('test_data.json', function(err, raw) {
 
-		return idx
-	}
+		//prepare final data container
+		var nodes = []
+		var links = []
+		var data = {nodes: nodes, links: links}
 
-	//add container name to nodes if not yet exists
-	var upsertLink = function(fromIdx, toIdx){
-		var existing = links.filter(function(l){
-			return l.source === fromIdx && l.target === toIdx
-		})
-
-		if(existing.length == 0) {
-			links.push({source: fromIdx, target: toIdx, value: 1})
-		} else {
-			//increment value
-			existing.forEach(function(ex){
-				ex.value++
+		//add container name to nodes if not yet exists
+		var upsertNode = function(name){
+			var n = nodes.filter(function(n){
+				return n.name === name
 			})
+
+			if(n.length === 0) {
+				nodes.push({name: name, group: nodes.length})
+			}
 		}
-	}
+
+		//get an index of a node by name
+		var indexOfNode = function(name) {
+			var idx = 0
+			nodes.forEach(function(n){
+				if(n.name === name) {
+					idx = nodes.indexOf(n)
+					return
+				}
+			})
+
+			return idx
+		}
+
+		//add container name to nodes if not yet exists
+		var upsertLink = function(fromIdx, toIdx){
+			var existing = links.filter(function(l){
+				return l.source === fromIdx && l.target === toIdx
+			})
+
+			if(existing.length == 0) {
+				links.push({source: fromIdx, target: toIdx, value: 1})
+			} else {
+				//increment value
+				existing.forEach(function(ex){
+					ex.value++
+				})
+			}
+		}
 
 	//loop through raw logs
-	data.forEach(function(l){
+	raw.forEach(function(l){
 
 		upsertNode(l.From)
 		upsertNode(l.To)
@@ -90,38 +144,39 @@ d3.json("/logs", function(error, data) {
 		upsertLink(fromIdx, toIdx)
 	})
 
-	//graph data
-  force
-      .nodes(graph.nodes)
-      .links(graph.links)
-      .start();
 
-  var link = svg.selectAll(".link")
-      .data(graph.links)
-    .enter().append("line")
-      .attr("class", "link")
-      .style("stroke-width", function(d) { return Math.sqrt(d.value); });
+    data.nodes.forEach(function(d, i) {
+        d.id = i;
+    });
 
-  var node = svg.selectAll(".node")
-      .data(graph.nodes)
-    .enter().append("circle")
-      .attr("class", "node")
-      .attr("r", 5)
-      .style("fill", function(d) { return color(d.group); })
-      .call(force.drag);
+    link = svg.selectAll('.link')
+        .data( data.links )
+      .enter().append('line')
+        .attr('class', 'link')
+        .style("stroke-width", function(d) { return Math.sqrt(d.value); });
 
-  node.append("title")
-      .text(function(d) { return d.name; });
+    node = svg.selectAll('.node')
+        .data( data.nodes )
+      .enter().append('g')
+        .attr('title', name)
+        .attr('class', 'node')
+        .call( force.drag );
 
-  force.on("tick", function() {
-    link.attr("x1", function(d) { return d.source.x; })
-        .attr("y1", function(d) { return d.source.y; })
-        .attr("x2", function(d) { return d.target.x; })
-        .attr("y2", function(d) { return d.target.y; });
+    node.append('circle')
+        .attr('r', 30)
+        .attr('fill', colorByGroup)
+        .attr('fill-opacity', 0.5);
 
-    node.attr("cx", function(d) { return d.x; })
-        .attr("cy", function(d) { return d.y; });
-  });
+    node.append('circle')
+        .attr('r', 4)
+        .attr('stroke', 'black');
+
+    force
+        .nodes( data.nodes )
+        .links( data.links )
+        .start();
 });
 
-</script>
+    </script>
+  </body>
+</html>
