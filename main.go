@@ -138,109 +138,109 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//start httpry
+	//Handle httpry and save to db
 	err = cmd.Start()
-	if err != nil {
-		log.Fatal(err)
-	}
+	if err == nil {
 
-	//scan httpry output
-	scanner := bufio.NewScanner(stdout)
-	go func() {
-		for scanner.Scan() {
+		//scan httpry output
+		scanner := bufio.NewScanner(stdout)
+		go func() {
+			for scanner.Scan() {
 
-			//split line by whitespace
-			fields := strings.Fields(scanner.Text())
+				//split line by whitespace
+				fields := strings.Fields(scanner.Text())
 
-			//parse using layou Mon Jan 2 15:04:05 MST 2006
-			t, err := time.Parse("2006-01-02 15:04:05", fmt.Sprintf("%s %s", fields[0], fields[1]))
-			if err != nil {
-				t = time.Time{}
-			}
+				//parse using layou Mon Jan 2 15:04:05 MST 2006
+				t, err := time.Parse("2006-01-02 15:04:05", fmt.Sprintf("%s %s", fields[0], fields[1]))
+				if err != nil {
+					t = time.Time{}
+				}
 
-			c, err := strconv.Atoi(fields[9])
-			if err != nil {
-				c = -1
-			}
+				c, err := strconv.Atoi(fields[9])
+				if err != nil {
+					c = -1
+				}
 
-			//create log
-			l := &Log{
-				Time:   t,
-				Src:    fields[2],
-				Dst:    fields[3],
-				Way:    fields[4],
-				Method: fields[5],
-				Host:   fields[6],
-				Path:   fields[7],
-				Code:   c,
-				Status: fields[10],
-			}
+				//create log
+				l := &Log{
+					Time:   t,
+					Src:    fields[2],
+					Dst:    fields[3],
+					Way:    fields[4],
+					Method: fields[5],
+					Host:   fields[6],
+					Path:   fields[7],
+					Code:   c,
+					Status: fields[10],
+				}
 
-			//since requests cannot be associated to responses only log requests
-			if l.Way == "<" {
-				continue
-			}
+				//since requests cannot be associated to responses only log requests
+				if l.Way == "<" {
+					continue
+				}
 
-			var to docker.APIContainers
-			var from docker.APIContainers
-			var ok bool
+				var to docker.APIContainers
+				var from docker.APIContainers
+				var ok bool
 
-			//get To by hostname port
-			dstport := int64(80)
-			dstparts := strings.SplitN(l.Host, ":", 2)
-			if len(dstparts) > 1 {
-				i, err := strconv.Atoi(dstparts[1])
+				//get To by hostname port
+				dstport := int64(80)
+				dstparts := strings.SplitN(l.Host, ":", 2)
+				if len(dstparts) > 1 {
+					i, err := strconv.Atoi(dstparts[1])
+					if err != nil {
+						log.Println("Error:", err)
+					}
+
+					dstport = int64(i)
+				}
+
+				if to, ok = node.PortMap[dstport]; !ok {
+					log.Printf("Error: Failed to find container from portmap, host: '%s', port: '%d'", l.Host, dstport)
+				} else {
+					l.To = to.ID
+				}
+
+				// From by src ip
+				if from, ok = node.IpMap[l.Src]; !ok {
+					log.Printf("Error: Failed to find container from ipmap, src: '%s', map: '%d'", l.Src, node.IpMap)
+				} else {
+					l.From = from.ID
+				}
+
+				//serialize
+				json, err := json.Marshal(l)
 				if err != nil {
 					log.Println("Error:", err)
 				}
 
-				dstport = int64(i)
+				// write to db
+				err = db.Update(func(tx *bolt.Tx) error {
+					b, err := tx.CreateBucketIfNotExists(tlogs)
+					if err != nil {
+						return err
+					}
+
+					//generate uid
+					uid, err := uuid.NewV4()
+					if err != nil {
+						return err
+					}
+
+					//use current nano as a key @todo come up with something more ressilient
+					err = b.Put([]byte(uid.String()), json)
+					if err != nil {
+						return err
+					}
+
+					return nil
+				})
+
+				fmt.Printf("%s - %s %s -> %s\n", l.From, l.Method, l.Path, l.To)
 			}
+		}()
 
-			if to, ok = node.PortMap[dstport]; !ok {
-				log.Printf("Error: Failed to find container from portmap, host: '%s', port: '%d'", l.Host, dstport)
-			} else {
-				l.To = to.ID
-			}
-
-			// From by src ip
-			if from, ok = node.IpMap[l.Src]; !ok {
-				log.Printf("Error: Failed to find container from ipmap, src: '%s', map: '%d'", l.Src, node.IpMap)
-			} else {
-				l.From = from.ID
-			}
-
-			//serialize
-			json, err := json.Marshal(l)
-			if err != nil {
-				log.Println("Error:", err)
-			}
-
-			// write to db
-			err = db.Update(func(tx *bolt.Tx) error {
-				b, err := tx.CreateBucketIfNotExists(tlogs)
-				if err != nil {
-					return err
-				}
-
-				//generate uid
-				uid, err := uuid.NewV4()
-				if err != nil {
-					return err
-				}
-
-				//use current nano as a key @todo come up with something more ressilient
-				err = b.Put([]byte(uid.String()), json)
-				if err != nil {
-					return err
-				}
-
-				return nil
-			})
-
-			fmt.Printf("%s - %s %s -> %s\n", l.From, l.Method, l.Path, l.To)
-		}
-	}()
+	}
 
 	//serve logs
 	goji.Get("/logs", func(c web.C, w http.ResponseWriter, r *http.Request) {
