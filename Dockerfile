@@ -13,5 +13,5 @@ ADD . /gopath/src/app/
 RUN go get app
 
 CMD []
-EXPOSE 3839
+EXPOSE 8000
 ENTRYPOINT ["/gopath/bin/app"]

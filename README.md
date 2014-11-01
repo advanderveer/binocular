@@ -1,2 +1,2 @@
-How about, instead we httpry the host docker0 interface
-`docker build -t binocular . ; docker run --net=host -p 3839:3839 -it -e DOCKER_HOST=tcp://`boot2docker ip`:2376 -e DOCKER_CERT_PATH=/cert -v /home/docker/.docker:/cert binocular`
+Build and run on a host
+`docker build -t binocular . ; docker run --net=host -it -e DOCKER_HOST=tcp://`boot2docker ip`:2376 -e DOCKER_CERT_PATH=/cert -v /home/docker/.docker:/cert binocular`

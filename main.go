@@ -18,6 +18,8 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/nu7hatch/gouuid"
+	"github.com/zenazn/goji"
+	"github.com/zenazn/goji/web"
 )
 
 type Docker struct {
@@ -43,15 +45,20 @@ type Node struct {
 	IpMap   map[string]docker.APIContainers
 }
 
-var bind = flag.String("bind", ":3839", "the port on which the http server will bind")
 var iface = flag.String("i", "docker0", "the docker network interface.")
 
 var tlogs = []byte("logs")
 
 func main() {
 
+	//get cwd
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// open bolt db
-	db, err := bolt.Open("binocular.db", 0644, nil)
+	db, err := bolt.Open(filepath.Join(cwd, "binocular.db"), 0644, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -235,51 +242,57 @@ func main() {
 		}
 	}()
 
-	//start a web server that logs incoming requests to a file
-	log.Printf("Listening for incoming on %s...", *bind)
-	err = http.ListenAndServe(*bind, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	//serve logs
+	goji.Get("/logs", func(c web.C, w http.ResponseWriter, r *http.Request) {
 
-		//for fetching logs
-		if r.RequestURI == "/logs" {
+		logs := []*Log{}
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket(tlogs)
+			if b == nil {
+				return err
+			}
 
-			logs := []*Log{}
-			db.View(func(tx *bolt.Tx) error {
-				b := tx.Bucket(tlogs)
-				if b == nil {
+			b.ForEach(func(k, v []byte) error {
+				l := &Log{}
+				err := json.Unmarshal(v, l)
+				if err != nil {
 					return err
 				}
 
-				b.ForEach(func(k, v []byte) error {
-					l := &Log{}
-					err := json.Unmarshal(v, l)
-					if err != nil {
-						return err
-					}
-
-					logs = append(logs, l)
-					return nil
-				})
-
+				logs = append(logs, l)
 				return nil
 			})
 
-			enc := json.NewEncoder(w)
-			err = enc.Encode(logs)
+			return nil
+		})
+
+		enc := json.NewEncoder(w)
+		err = enc.Encode(logs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	//otherwise server static file
+	goji.Use(func(c *web.C, h http.Handler) http.Handler {
+
+		dir := filepath.Join(cwd, "client")
+		fs := http.FileServer(http.Dir(dir))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			fname := filepath.Join(dir, r.URL.Path)
+
+			_, err := os.Stat(fname)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				h.ServeHTTP(w, r)
 				return
 			}
 
-		} else {
+			fs.ServeHTTP(w, r)
+		})
+	})
 
-			//@todo interface
-
-		}
-
-	}))
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	goji.Serve()
 
 }
