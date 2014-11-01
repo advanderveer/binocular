@@ -1,205 +1,280 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/boltdb/bolt"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/nu7hatch/gouuid"
 )
 
 type Docker struct {
 	client *docker.Client
 }
 
-func NewDocker(addr string, cert string) (*Docker, error) {
-	host, err := url.Parse(addr)
-	if err != nil {
-		return nil, err
-	}
+type Log struct {
+	Time   time.Time
+	From   string //src container id
+	To     string //dst container id
+	Src    string
+	Dst    string
+	Way    string
+	Method string
+	Host   string
+	Path   string
+	Code   int
+	Status string
+}
 
-	//change to http connection
-	host.Scheme = "https"
-
-	c, err := docker.NewClient(host.String())
-	if err != nil {
-		return nil, err
-	}
-
-	//we use our own transform and client to support boot2docker tls requirements
-	//@see https://github.com/boot2docker/boot2docker/issues/576
-	//@see http://stackoverflow.com/questions/21562269/golang-how-to-specify-certificate-in-tls-config-for-http-client
-	cas := x509.NewCertPool()
-	pemData, err := ioutil.ReadFile(filepath.Join(cert, "ca.pem"))
-	if err != nil {
-		return nil, err
-	}
-
-	//add to pool and configrue tls
-	cas.AppendCertsFromPEM(pemData)
-
-	//load pair
-	pair, err := tls.LoadX509KeyPair(filepath.Join(cert, "cert.pem"), filepath.Join(cert, "key.pem"))
-	if err != nil {
-		return nil, err
-	}
-
-	//create new tls config with the created ca and pair
-	conf := &tls.Config{
-		RootCAs:      cas,
-		Certificates: []tls.Certificate{pair},
-	}
-
-	//create our own transport
-	tr := &http.Transport{
-		TLSClientConfig: conf,
-	}
-
-	//set docker client with new transport
-	c.HTTPClient = &http.Client{Transport: tr}
-
-	return &Docker{c}, nil
+type Node struct {
+	PortMap map[int64]docker.APIContainers
+	IpMap   map[string]docker.APIContainers
 }
 
 var bind = flag.String("bind", ":3839", "the port on which the http server will bind")
+var iface = flag.String("i", "docker0", "the docker network interface.")
+
+var tlogs = []byte("logs")
 
 func main() {
+
+	// open bolt db
+	db, err := bolt.Open("binocular.db", 0644, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
 	//parse flags
 	flag.Parse()
 
-	//probably 172.17.42.1
+	//get config from env
 	host := os.Getenv("DOCKER_HOST")
 	if host == "" {
 		log.Fatal(fmt.Errorf("Could not retrieve DOCKER_HOST, not provided as option and not in env"))
 	}
 
-	cert := os.Getenv("DOCKER_CERT_PATH")
-	if cert == "" {
+	cpath := os.Getenv("DOCKER_CERT_PATH")
+	if cpath == "" {
 		log.Fatal(fmt.Errorf("Could not retrieve DOCKER_CERT_PATH, not provided as option and not in env"))
 	}
 
-	dock, err := NewDocker(host, cert)
+	//change to http connection
+	addr, err := url.Parse(host)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	addr.Scheme = "https"
+
+	//setup tls docker client
+	client, err := docker.NewTLSClient(addr.String(), filepath.Join(cpath, "cert.pem"), filepath.Join(cpath, "key.pem"), filepath.Join(cpath, "ca.pem"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// get all running containers
 	lopts := docker.ListContainersOptions{}
-	cs, err := dock.client.ListContainers(lopts)
+	cs, err := client.ListContainers(lopts)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	//inject monitoring into each container
+	//host information
+	node := &Node{
+		PortMap: map[int64]docker.APIContainers{},
+		IpMap:   map[string]docker.APIContainers{},
+	}
+
+	//create httpry command
+	var parts []string
 	for _, c := range cs {
 
-		//skip binocular containers
-		if strings.HasPrefix(c.Image, "binocular") {
-			log.Printf("[%s] Skipping binocular container", c.ID)
-			continue
+		//fetch public ports
+		for _, p := range c.Ports {
+			parts = append(parts, fmt.Sprintf("port %d", p.PublicPort))
+
+			//map public ports to container
+			node.PortMap[p.PublicPort] = c
 		}
 
-		//create
-		copts := docker.CreateExecOptions{
-			Container:    c.ID,
-			AttachStdin:  false,
-			AttachStdout: true,
-			AttachStderr: true,
-			Cmd:          []string{"apt-get", "update"},
-		}
-
-		sopts := docker.StartExecOptions{
-			Detach:       true,
-			OutputStream: os.Stdout,
-			ErrorStream:  os.Stderr,
-		}
-
-		exec, err := dock.client.CreateExec(copts)
+		details, err := client.InspectContainer(c.ID)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		//update package control
-		log.Printf("[%s] (%s), Updating...", c.ID, copts.Cmd)
-		err = dock.client.StartExec(exec.Id, sopts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//install prerequiseted
-		copts.Cmd = []string{"apt-get", "install", "-y", "wget", "httpry"}
-		exec, err = dock.client.CreateExec(copts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("[%s] (%s), Installing...", c.ID, copts.Cmd)
-		err = dock.client.StartExec(exec.Id, sopts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//download the script
-		copts.Cmd = []string{"wget", "-O", "/tmp/binocular.sh", "https://gist.githubusercontent.com/advanderveer/1b0a563091af2b0b9b0e/raw/f406fc67741e320960ce00a940606744605284ff/binocular.sh"}
-		exec, err = dock.client.CreateExec(copts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("[%s] (%s), Downloading binocular...", c.ID, copts.Cmd)
-		err = dock.client.StartExec(exec.Id, sopts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//make the downloaded script executable
-		copts.Cmd = []string{"chmod", "+x", "/tmp/binocular.sh"}
-		exec, err = dock.client.CreateExec(copts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("[%s] (%s), Make executable...", c.ID, copts.Cmd)
-		err = dock.client.StartExec(exec.Id, sopts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//finally execute the script
-		copts.AttachStdout = false
-		copts.AttachStderr = false
-
-		copts.Cmd = []string{"sh", "/tmp/binocular.sh"}
-		exec, err = dock.client.CreateExec(copts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("[%s] (%s), Executing...", c.ID, copts.Cmd)
-		err = dock.client.StartExec(exec.Id, sopts)
-		if err != nil {
-			log.Fatal(err)
-		}
-
+		//map ip to container
+		node.IpMap[details.NetworkSettings.IPAddress] = c
 	}
+
+	//create expression and httpry command
+	exp := strings.Join(parts, " or ")
+	log.Printf("Starting httpry on '%s' with exp '%s'...", *iface, exp)
+	cmd := exec.Command("httpry", "-q", "-F", "-i", *iface, exp)
+	cmd.Stderr = os.Stderr
+
+	//pipe stdout for analyses
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//start httpry
+	err = cmd.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//scan httpry output
+	scanner := bufio.NewScanner(stdout)
+	go func() {
+		for scanner.Scan() {
+
+			//split line by whitespace
+			fields := strings.Fields(scanner.Text())
+
+			//parse using layou Mon Jan 2 15:04:05 MST 2006
+			t, err := time.Parse("2006-01-02 15:04:05", fmt.Sprintf("%s %s", fields[0], fields[1]))
+			if err != nil {
+				t = time.Time{}
+			}
+
+			c, err := strconv.Atoi(fields[9])
+			if err != nil {
+				c = -1
+			}
+
+			//create log
+			l := &Log{
+				Time:   t,
+				Src:    fields[2],
+				Dst:    fields[3],
+				Way:    fields[4],
+				Method: fields[5],
+				Host:   fields[6],
+				Path:   fields[7],
+				Code:   c,
+				Status: fields[10],
+			}
+
+			//since requests cannot be associated to responses only log requests
+			if l.Way == "<" {
+				continue
+			}
+
+			var to docker.APIContainers
+			var from docker.APIContainers
+			var ok bool
+
+			//get To by hostname port
+			dstport := int64(80)
+			dstparts := strings.SplitN(l.Host, ":", 2)
+			if len(dstparts) > 1 {
+				i, err := strconv.Atoi(dstparts[1])
+				if err != nil {
+					log.Println("Error:", err)
+				}
+
+				dstport = int64(i)
+			}
+
+			if to, ok = node.PortMap[dstport]; !ok {
+				log.Printf("Error: Failed to find container from portmap, host: '%s', port: '%d'", l.Host, dstport)
+			} else {
+				l.To = to.ID
+			}
+
+			// From by src ip
+			if from, ok = node.IpMap[l.Src]; !ok {
+				log.Printf("Error: Failed to find container from ipmap, src: '%s', map: '%d'", l.Src, node.IpMap)
+			} else {
+				l.From = from.ID
+			}
+
+			//serialize
+			json, err := json.Marshal(l)
+			if err != nil {
+				log.Println("Error:", err)
+			}
+
+			// write to db
+			err = db.Update(func(tx *bolt.Tx) error {
+				b, err := tx.CreateBucketIfNotExists(tlogs)
+				if err != nil {
+					return err
+				}
+
+				//generate uid
+				uid, err := uuid.NewV4()
+				if err != nil {
+					return err
+				}
+
+				//use current nano as a key @todo come up with something more ressilient
+				err = b.Put([]byte(uid.String()), json)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			})
+
+			fmt.Printf("%s - %s %s -> %s\n", l.From, l.Method, l.Path, l.To)
+		}
+	}()
 
 	//start a web server that logs incoming requests to a file
 	log.Printf("Listening for incoming on %s...", *bind)
 	err = http.ListenAndServe(*bind, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello World from binocular")
 
-		//also print to console
-		log.Println(fmt.Sprint(r.URL))
-		log.Println(fmt.Sprint(r.Header))
+		//for fetching logs
+		if r.RequestURI == "/logs" {
+
+			logs := []*Log{}
+			db.View(func(tx *bolt.Tx) error {
+				b := tx.Bucket(tlogs)
+				if b == nil {
+					return err
+				}
+
+				b.ForEach(func(k, v []byte) error {
+					l := &Log{}
+					err := json.Unmarshal(v, l)
+					if err != nil {
+						return err
+					}
+
+					logs = append(logs, l)
+					return nil
+				})
+
+				return nil
+			})
+
+			enc := json.NewEncoder(w)
+			err = enc.Encode(logs)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+		} else {
+
+			//@todo interface
+
+		}
 
 	}))
 

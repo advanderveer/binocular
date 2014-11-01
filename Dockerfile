@@ -1,13 +1,17 @@
 FROM google/golang:1.3
 
-#we usegodep
-RUN go get github.com/tools/godep
-RUN mkdir -p /gopath/src/github.com/dockpit/binocular
+#install httpry
+RUN apt-get update
+RUN echo 'deb http://http.debian.net/debian wheezy-backports main' >> /etc/apt/sources.list
+RUN apt-get update
+RUN apt-get install -y httpry
 
-WORKDIR /gopath/src/github.com/dockpit/binocular
-ADD . /gopath/src/github.com/dockpit/binocular
-RUN godep go build -o /gopath/bin/binocular
+# install gostuff
+RUN go get -d github.com/docker/docker/...
+WORKDIR /gopath/src/app
+ADD . /gopath/src/app/
+RUN go get app
 
 CMD []
 EXPOSE 3839
-ENTRYPOINT ["/gopath/bin/binocular"]
+ENTRYPOINT ["/gopath/bin/app"]
