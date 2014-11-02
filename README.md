@@ -11,8 +11,8 @@ A simple web page is exposed that draws a standard 'force directed' graph based 
 
 Advantages:
 - By having an always up-to-date overview of dependencies and their versions (through the used docker image) it becomes easier to communicate breaking changes to the correct team members. 
-- Dependencies between micorservice should reduced to the bare minimun, Binocular aims to better inform software developers about the dependencies they create.
-- _As A Bonus:_ It provides visual feedback how often an certain endpoint is used, this helps focus optimization effort to specific endpoints.
+- Dependencies between micorservice should be reduced to the bare minimun, Binocular aims to better inform software developers about the dependencies they create.
+- _As A Bonus:_ It provides visual feedback on how often a certain endpoint is used, this helps focus optimization effort to specific endpoints.
 
 
 ### Run on Boot2Docker:
