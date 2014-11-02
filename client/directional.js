@@ -1,42 +1,3 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <script src="http://d3js.org/d3.v3.js"></script>
-    <style>
-
-    path.link {
-      fill: none;
-      stroke: #666;
-      stroke-width: 1.5px;
-    }
-
-    circle {
-      fill: #ccc;
-      stroke: #fff;
-      stroke-width: 1.5px;
-    }
-
-    text {
-      fill: #000;
-      font: 10px sans-serif;
-      pointer-events: none;
-    }
-
-    </style>
-
-    <link href='http://fonts.googleapis.com/css?family=Roboto:400,300,500' rel='stylesheet' type='text/css'>
-    <link rel="stylesheet" type="text/css" href="main.css">
-  </head>
-  <body>
-    <h1>
-      <a target="_blank" href="http://dockpit.io" class="lighter">dockpit.io</a>/<a target="_blank" href="http://github.com/dockpit/binocular">binocular</a>
-    </h1>
-    <h2>microservice overview</h2>
-
-
-
-<script>
 
 // get the data
 d3.json('test_data.json', function(error, raw) {
@@ -79,8 +40,8 @@ var force = d3.layout.force()
     .nodes(d3.values(nodes))
     .links(links)
     .size([width, height])
-    .linkDistance(60)
-    .charge(-300)
+    .linkDistance(300)
+    .charge(-2000)
     .on("tick", tick)
     .start();
 
@@ -197,7 +158,3 @@ function tick() {
 }
 
 });
-
-</script>
-</body>
-</html>
