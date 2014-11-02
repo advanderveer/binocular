@@ -1,13 +1,18 @@
 # Dockpit Binocular
 _NOTE: This is our submission for the Docker Global Hack Day, as such it is based on several terrible hacks and should not be used in production._
 
-Microservices are a great way to create backend architectures and Docker provides an excellent solution for containerizing and seperating individual services. But as the number of microservices increases and responsibility for them spreads amongst different team members, dependencies become harder and harder to manage. 
+Docker is an awesome tool for creating [microservice](http://martinfowler.com/articles/microservices.html) architectures. But as the number of microservices increases and responsibility for them spreads amongst different team members, dependencies become harder and harder to manage. 
 
-Binocular aims to be an plug-and-play solution that maps services and their dependencies by sniffing and logging _real_ http traffic between containers over the host network interface (docker0). In doing so it is also capable of inspecting HTTP headers and determine what exact endpoint are used by what service and how often. 
+Binocular aims to be an plug-and-play solution that maps services and their dependencies by sniffing and logging _real_ http traffic between containers over the host network interface (docker0). In doing so it is capable of inspecting HTTP headers and determine what exact endpoint are used by what service and how often. 
 
 A simple web page is exposed that draws a standard 'force directed' graph based on the logged HTTP requests:
 
 <img src="screenshot.png" width="569">
+
+Advantages:
+- By having an always up-to-date overview of dependencies and their versions (through the used docker image) it becomes easier to communicate breaking changes to the correct team members. 
+- Dependencies between micorservice should reduced to the bare minimun, Binocular aims to better inform software developers about the dependencies they create.
+- _As A Bonus:_ It provides visual feedback how often an certain endpoint is used, this helps focus optimization effort to specific endpoints.
 
 
 ### Run on Boot2Docker:
