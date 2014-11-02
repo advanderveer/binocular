@@ -10,6 +10,8 @@ var anonymous = {
 }
 
 var containers = {}
+var lowValue = 1;
+var hiValue = 1;
 var nodes = {};
 var links = [];
 var width = window.innerWidth,
@@ -41,10 +43,6 @@ raw.forEach(function(l){
   upsertLink(l.From, l.To)
 })
 
-
-
-
-
 // Compute the distinct nodes from the links.
 links.forEach(function(link) {    
     link.source = nodes[link.source] || 
@@ -54,10 +52,22 @@ links.forEach(function(link) {
     link.value = +link.value;    
 });
 
+//create index for neighbouring
 var linkedByIndex = {};
 links.forEach(function(d) {    
     linkedByIndex[d.source.name + "," + d.target.name] = 1;
 });
+
+//find lowest and highest link value 
+links.forEach(function(d){
+    if(d.value < lowValue) {
+        lowValue = d.value
+    }
+
+    if(d.value > hiValue) {
+        hiValue = d.value
+    }
+})
 
 function isConnected(a, b) {    
     res = linkedByIndex[a.name + "," + b.name]  || a.name == b.name;
@@ -105,7 +115,12 @@ var path = svg.append("svg:g").selectAll("path")
     .data(force.links())
   .enter().append("svg:path")
     .attr("class", "link")
-    .attr("marker-end", "url(#end)");
+    .attr("marker-end", "url(#end)")
+    .style("stroke-width", function(d) {
+        var scale = (hiValue - lowValue)
+        var rel = (d.value - lowValue)
+        return 1+(rel*1.3); 
+    });
 
 // define the nodes
 var node = svg.selectAll(".node")
@@ -187,8 +202,6 @@ function fade(opacity) {
     return function(d) {
         node.style("stroke-opacity", function(o) {
             var isc = isConnected(d, o)
-            console.log(isc)
-
             thisOpacity = isc ? 1 : opacity;
             this.setAttribute('fill-opacity', thisOpacity);
             return thisOpacity;
