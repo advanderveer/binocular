@@ -48,3 +48,14 @@ h2 {
   stroke: #999;
   stroke-opacity: 0.5;
 }
+
+.label-cname {
+	font-family: 'Roboto', sans-serif;
+	font-weight: bold;
+}
+
+.label-cid, .label-iid {
+	font-family: 'Roboto', sans-serif;
+	font-weight: lighter;
+	font-size: 0.8em;
+}

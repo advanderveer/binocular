@@ -1,11 +1,18 @@
 
 // get the data
-d3.json('test_data.json', function(error, raw) {
+d3.json('/containers', function(error, craw) {
+d3.json('/test_data.json', function(error, raw) {
 
+
+var containers = {}
 var nodes = {};
 var links = [];
 var width = window.innerWidth,
     height = window.innerHeight;
+
+craw.forEach(function(c){
+    containers[c.ID] = c
+})
 
 function upsertLink(from, to){
   var existing = links.filter(function(l){
@@ -96,11 +103,35 @@ node.append('circle')
     .attr('fill', "#CCC")
     .attr('fill-opacity', 0.5);
 
-// add the text 
+
+// add the container name(s)
 node.append("text")
     .attr("x", 12)
+    .attr("class", "label-cname")
+    .attr("dy", "-.8em")
+    .text(function(d) { 
+        var c = containers[d.name]
+        return c.Names.join(", "); 
+    });
+
+// add the container id
+node.append("text")
+    .attr("x", 12)
+    .attr("class", "label-cid")
     .attr("dy", ".35em")
-    .text(function(d) { return d.name.substring(0,5); });
+    .text(function(d) { 
+        return d.name.substring(0,8); 
+    });
+
+// add the container image name
+node.append("text")
+    .attr("x", 12)
+    .attr("class", "label-iid")
+    .attr("dy", "1.5em")
+    .text(function(d) { 
+        var c = containers[d.name]
+        return c.Image
+    });
 
 
 //intersection rendering
@@ -143,18 +174,18 @@ function tick() {
         return "translate(" + d.x + "," + d.y + ")"; });
 
     //render clipping
-    var clip = svg.selectAll('.clip')
-        .data( recenterVoronoi(node.data()), function(d) { return d.point.index; } );
+    // var clip = svg.selectAll('.clip')
+    //     .data( recenterVoronoi(node.data()), function(d) { return d.point.index; } );
 
-    clip.enter().append('clipPath')
-        .attr('id', function(d) { return 'clip-'+d.point.index; })
-        .attr('class', 'clip');
+    // clip.enter().append('clipPath')
+    //     .attr('id', function(d) { return 'clip-'+d.point.index; })
+    //     .attr('class', 'clip');
     
-    clip.exit().remove()
+    // clip.exit().remove()
 
-    clip.selectAll('path').remove();
-    clip.append('path')
-        .attr('d', function(d) { return 'M'+d.join(',')+'Z'; });
+    // clip.selectAll('path').remove();
+    // clip.append('path')
+    //     .attr('d', function(d) { return 'M'+d.join(',')+'Z'; });
 }
 
-});
+})});

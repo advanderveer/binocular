@@ -26,6 +26,12 @@ type Docker struct {
 	client *docker.Client
 }
 
+type Container struct {
+	ID    string
+	Image string
+	Names []string
+}
+
 type Log struct {
 	Time   time.Time
 	From   string //src container id
@@ -41,8 +47,9 @@ type Log struct {
 }
 
 type Node struct {
-	PortMap map[int64]docker.APIContainers
-	IpMap   map[string]docker.APIContainers
+	Containers []docker.APIContainers
+	PortMap    map[int64]docker.APIContainers
+	IpMap      map[string]docker.APIContainers
 }
 
 var iface = flag.String("i", "docker0", "the docker network interface.")
@@ -101,13 +108,16 @@ func main() {
 
 	//host information
 	node := &Node{
-		PortMap: map[int64]docker.APIContainers{},
-		IpMap:   map[string]docker.APIContainers{},
+		Containers: []docker.APIContainers{},
+		PortMap:    map[int64]docker.APIContainers{},
+		IpMap:      map[string]docker.APIContainers{},
 	}
 
 	//create httpry command
 	var parts []string
 	for _, c := range cs {
+
+		node.Containers = append(node.Containers, c)
 
 		//fetch public ports
 		for _, p := range c.Ports {
@@ -241,6 +251,26 @@ func main() {
 		}()
 
 	}
+
+	//serve node data
+	goji.Get("/containers", func(ctx web.C, w http.ResponseWriter, r *http.Request) {
+		containers := []*Container{}
+
+		for _, c := range node.Containers {
+			containers = append(containers, &Container{
+				ID:    c.ID,
+				Image: c.Image,
+				Names: c.Names,
+			})
+		}
+
+		enc := json.NewEncoder(w)
+		err = enc.Encode(containers)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
 
 	//serve logs
 	goji.Get("/logs", func(c web.C, w http.ResponseWriter, r *http.Request) {
