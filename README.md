@@ -3,7 +3,7 @@ _NOTE: This is our submission for the Docker Global Hack Day, as such it is base
 
 Docker is an awesome tool for creating [microservice](http://martinfowler.com/articles/microservices.html) architectures. But as the number of services increases and responsibility for them spreads amongst different team members, dependencies become harder and harder to manage. 
 
-Binocular aims to be an plug-and-play solution that maps services and their dependencies by sniffing and logging _real_ http traffic between containers over the host network interface (docker0). In doing so it is capable of inspecting HTTP headers and determine what exact endpoint are used by what service and how often. 
+Binocular aims to be a simple plug-and-play solution that maps services and their dependencies by sniffing and logging _real_ http traffic between containers over the host network interface (docker0). In doing so it is capable of inspecting HTTP headers and determine what exact endpoint are used by what service and how often. 
 
 A simple web page is exposed that draws a standard 'force directed' graph based on the logged HTTP requests:
 
