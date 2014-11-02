@@ -3,6 +3,11 @@
 d3.json('/containers', function(error, craw) {
 d3.json('/test_data.json', function(error, raw) {
 
+var anonymous = {
+    ID: "000000000000000000",
+    Names: ["/anonymous"],
+    Image: ["scratch"]
+}
 
 var containers = {}
 var nodes = {};
@@ -29,19 +34,35 @@ function upsertLink(from, to){
   }
 }
 
+
+
 //raw to links
 raw.forEach(function(l){
   upsertLink(l.From, l.To)
 })
 
+
+
+
+
 // Compute the distinct nodes from the links.
-links.forEach(function(link) {
+links.forEach(function(link) {    
     link.source = nodes[link.source] || 
         (nodes[link.source] = {name: link.source});
     link.target = nodes[link.target] || 
         (nodes[link.target] = {name: link.target});
-    link.value = +link.value;
+    link.value = +link.value;    
 });
+
+var linkedByIndex = {};
+links.forEach(function(d) {    
+    linkedByIndex[d.source.name + "," + d.target.name] = 1;
+});
+
+function isConnected(a, b) {    
+    res = linkedByIndex[a.name + "," + b.name]  || a.name == b.name;
+    return res
+}
 
 var force = d3.layout.force()
     .nodes(d3.values(nodes))
@@ -91,7 +112,8 @@ var node = svg.selectAll(".node")
     .data(force.nodes())
   .enter().append("g")
     .attr("class", "node")
-    .call(force.drag);
+    .call(force.drag)
+    .on("mouseover", fade(.1)).on("mouseout", fade(1));;
 
 // add the nodes
 node.append("circle")
@@ -100,7 +122,7 @@ node.append("circle")
 //selection circle
 node.append('circle')
     .attr('r', 30)
-    .attr('fill', "#CCC")
+    .attr('fill', "#EFEFEF")
     .attr('fill-opacity', 0.5);
 
 
@@ -111,6 +133,9 @@ node.append("text")
     .attr("dy", "-.8em")
     .text(function(d) { 
         var c = containers[d.name]
+        if(!c) {
+            c = anonymous
+        }
         return c.Names.join(", "); 
     });
 
@@ -130,6 +155,9 @@ node.append("text")
     .attr("dy", "1.5em")
     .text(function(d) { 
         var c = containers[d.name]
+        if(!c) {
+            c = anonymous
+        }
         return c.Image
     });
 
@@ -154,6 +182,24 @@ function recenterVoronoi(nodes) {
     return shapes;
 }
 
+//fade others on 
+function fade(opacity) {
+    return function(d) {
+        node.style("stroke-opacity", function(o) {
+            var isc = isConnected(d, o)
+            console.log(isc)
+
+            thisOpacity = isc ? 1 : opacity;
+            this.setAttribute('fill-opacity', thisOpacity);
+            return thisOpacity;
+        });
+
+        path.style("opacity", function(o) {
+            return o.source === d ? 1 : opacity;
+        });
+    };
+}
+
 // add the curvy lines
 function tick() {
     path.attr("d", function(d) {
@@ -172,20 +218,6 @@ function tick() {
         .attr('clip-path', function(d) { return 'url(#clip-'+d.index+')'; })
         .attr("transform", function(d) { 
         return "translate(" + d.x + "," + d.y + ")"; });
-
-    //render clipping
-    // var clip = svg.selectAll('.clip')
-    //     .data( recenterVoronoi(node.data()), function(d) { return d.point.index; } );
-
-    // clip.enter().append('clipPath')
-    //     .attr('id', function(d) { return 'clip-'+d.point.index; })
-    //     .attr('class', 'clip');
-    
-    // clip.exit().remove()
-
-    // clip.selectAll('path').remove();
-    // clip.append('path')
-    //     .attr('d', function(d) { return 'M'+d.join(',')+'Z'; });
 }
 
 })});
