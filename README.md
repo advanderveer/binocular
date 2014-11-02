@@ -1,7 +1,7 @@
 # Dockpit Binocular
 _NOTE: This is our submission for the Docker Global Hack Day, as such it is based on several terrible hacks and should not be used in production._
 
-Docker is an awesome tool for creating [microservice](http://martinfowler.com/articles/microservices.html) architectures. But as the number of microservices increases and responsibility for them spreads amongst different team members, dependencies become harder and harder to manage. 
+Docker is an awesome tool for creating [microservice](http://martinfowler.com/articles/microservices.html) architectures. But as the number of services increases and responsibility for them spreads amongst different team members, dependencies become harder and harder to manage. 
 
 Binocular aims to be an plug-and-play solution that maps services and their dependencies by sniffing and logging _real_ http traffic between containers over the host network interface (docker0). In doing so it is capable of inspecting HTTP headers and determine what exact endpoint are used by what service and how often. 
 
