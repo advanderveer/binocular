@@ -1,7 +1,7 @@
 
 // get the data
 d3.json('/containers', function(error, craw) {
-d3.json('/test_data.json', function(error, raw) {
+d3.json('/logs', function(error, raw) {
 
 var anonymous = {
     ID: "000000000000000000",
@@ -9,9 +9,12 @@ var anonymous = {
     Image: ["scratch"]
 }
 
-var containers = {}
 var lowValue = 1;
 var hiValue = 1;
+var maxArrowWidth = 1.4;
+var minArrowWidth = 0.5;
+
+var containers = {}
 var nodes = {};
 var links = [];
 var width = window.innerWidth,
@@ -119,7 +122,8 @@ var path = svg.append("svg:g").selectAll("path")
     .style("stroke-width", function(d) {
         var scale = (hiValue - lowValue)
         var rel = (d.value - lowValue)
-        return 1+(rel*1.3); 
+        
+        return minArrowWidth+(rel*(maxArrowWidth - minArrowWidth)); 
     });
 
 // define the nodes
