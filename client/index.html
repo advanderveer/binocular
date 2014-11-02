@@ -1,26 +1,17 @@
 <html>
   <head>
-    <style>
-
-.node {
-  opacity: 0.5;
-}
-
-.node:hover {
-  opacity: 1;
-}
-
-.link {
-  stroke: #999;
-  stroke-opacity: 0.3;
-}
-
-    </style>
     <script src="http://d3js.org/d3.v3.min.js"></script>
+    <link href='http://fonts.googleapis.com/css?family=Roboto:400,300,500' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="main.css">
   </head>
   <body>
+  	<h1>
+  		<a target="_blank" href="http://dockpit.io" class="lighter">dockpit.io</a>/<a target="_blank" href="http://github.com/dockpit/binocular">binocular</a>
+  	</h1>
+  	<h2>microservice overview</h2>
     <div id="viz"></div>
     <script>
+
 
 function name(d) { return d.name; }
 function group(d) { return d.group; }
@@ -28,13 +19,10 @@ function group(d) { return d.group; }
 var color = d3.scale.category10();
 function colorByGroup(d) { return color(group(d)); }
 
-var width = 960,
-    height = 500;
+//use full screen
+width = window.innerWidth, height = window.innerHeight;
 
-var svg = d3.select('#viz')
-    .append('svg')
-    .attr('width', width)
-    .attr('height', height);
+var svg = d3.select('#viz').append('svg')
 
 var node, link;
 
@@ -62,6 +50,17 @@ var force = d3.layout.force()
     .friction(0.3)
     .linkDistance(50)
     .size([width, height]);
+
+// -> Resizing logic
+function resize() {
+  width = window.innerWidth, height = window.innerHeight;
+  svg.attr("width", width).attr("height", height);
+  force.size([width, height]).resume();
+  voronoi.clipExtent([[-10, -10], [width+10, height+10]]);
+}
+
+d3.select(window).on("resize", resize);
+// -> Resizing logic end
 
 force.on('tick', function() {
     node.attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; })
@@ -157,14 +156,14 @@ d3.json('test_data.json', function(err, raw) {
 
     node = svg.selectAll('.node')
         .data( data.nodes )
-      .enter().append('g')
+      	.enter().append('g')
         .attr('title', name)
         .attr('class', 'node')
         .call( force.drag );
 
     node.append('circle')
         .attr('r', 30)
-        .attr('fill', colorByGroup)
+        .attr('fill', "#CCC")
         .attr('fill-opacity', 0.5);
 
     node.append('circle')
@@ -175,6 +174,8 @@ d3.json('test_data.json', function(err, raw) {
         .nodes( data.nodes )
         .links( data.links )
         .start();
+
+    resize();
 });
 
     </script>
