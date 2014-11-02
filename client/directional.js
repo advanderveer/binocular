@@ -12,13 +12,54 @@ var anonymous = {
 var lowValue = 1;
 var hiValue = 1;
 var maxArrowWidth = 1.4;
-var minArrowWidth = 0.5;
+var minArrowWidth = 0.8;
 
 var containers = {}
 var nodes = {};
 var links = [];
 var width = window.innerWidth,
     height = window.innerHeight;
+
+
+var panel = $("#details")
+panel.hide()
+function redrawPanel(node, deps) {
+    var list = panel.find("#d-nodes")
+
+    list.empty()
+    deps.forEach(function(dep){
+
+        var c = containers[dep.name]
+        if(!c) {
+            c = anonymous
+        }
+
+        var item = $("<li><h4>Service "+c.Names.join(", ")+"</h4><ul></ul></li>")
+        var endpoints = {}
+        list.append(item)        
+
+        //find all logs that are from node to dep
+        raw.forEach(function(l){
+            if(l.From == node.name && l.To == dep.name) {
+                existing = endpoints[l.Method+l.Path]
+                if(!existing) {
+                    existing = {count: 1, log: l}
+                    endpoints[l.Method+l.Path] = existing
+                } else {
+                    existing.count++
+                }
+
+                
+            }
+        })
+
+        Object.keys(endpoints).forEach(function(k) {
+            var ep = endpoints[k]
+            item.find("ul").append("<li>"+ep.count+"x "+ep.log.Method+" "+ep.log.Path+"</li>")
+        })
+    })
+    
+}
 
 craw.forEach(function(c){
     containers[c.ID] = c
@@ -38,8 +79,6 @@ function upsertLink(from, to){
     })
   }
 }
-
-
 
 //raw to links
 raw.forEach(function(l){
@@ -132,7 +171,7 @@ var node = svg.selectAll(".node")
   .enter().append("g")
     .attr("class", "node")
     .call(force.drag)
-    .on("mouseover", fade(.1)).on("mouseout", fade(1));;
+    .on("mouseover", focus(.1)).on("mouseout", focus(1));;
 
 // add the nodes
 node.append("circle")
@@ -201,11 +240,24 @@ function recenterVoronoi(nodes) {
     return shapes;
 }
 
-//fade others on 
-function fade(opacity) {
+//focus others on 
+function focus(opacity) {
+
     return function(d) {
+        var connections = []
+        if(opacity<1) {                    
+            panel.show();
+        } else {
+            panel.hide();
+        }
+
         node.style("stroke-opacity", function(o) {
             var isc = isConnected(d, o)
+            if(isc && d !== o) {
+                connections.push(o)
+            }
+
+
             thisOpacity = isc ? 1 : opacity;
             this.setAttribute('fill-opacity', thisOpacity);
             return thisOpacity;
@@ -214,6 +266,8 @@ function fade(opacity) {
         path.style("opacity", function(o) {
             return o.source === d ? 1 : opacity;
         });
+
+        redrawPanel(d, connections)
     };
 }
 

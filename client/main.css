@@ -39,6 +39,16 @@ h2 {
   opacity: 1;
 }
 
+#details {
+	font-family: 'Roboto', sans-serif;
+	position: absolute;
+	padding: 20px;
+	top: 0;
+	right: 0;
+	background-color: white;
+	border-left: 1px solid #333;	
+}
+
 .link {
   fill: none;
   stroke: #999;
