@@ -55,7 +55,7 @@ function redrawPanel(node, deps) {
 
         Object.keys(endpoints).forEach(function(k) {
             var ep = endpoints[k]
-            item.find("ul").append("<li>"+ep.count+"x "+ep.log.Method+" "+ep.log.Path+"</li>")
+            item.find("ul").append("<li><span class=\"lighter\">"+ep.count+"x</span> <b>"+ep.log.Method+" "+ep.log.Path+"</b></li>")
         })
     })
     
